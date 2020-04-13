@@ -131,16 +131,3 @@ class DRNN(nn.Module):
             return hidden, memory
         else:
             return hidden
-
-
-if __name__ == '__main__':
-    n_inp = 10
-    n_hidden = 16
-    n_layers = 3
-
-    model = DRNN(n_inp, n_hidden, n_layers, cell_type='LSTM')
-
-    test_x1 = torch.autograd.Variable(torch.randn(26, 2, n_inp))
-    test_x2 = torch.autograd.Variable(torch.randn(26, 2, n_inp))
-
-    out, hidden = model(test_x1)
