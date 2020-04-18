@@ -16,7 +16,7 @@ def read_file(file_path):
 
 
 def replace_zeroes(dataset):
-    # print(*dataset[0], sep=", ")
+    print(*dataset[0], sep=", ")
     for i in range(len(dataset)):
         temp_list = [value for value in dataset[i] if value != 0]
         current_median_value = statistics.median(temp_list)
