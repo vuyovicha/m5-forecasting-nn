@@ -4,8 +4,6 @@ from trainer import Trainer
 import config
 from model import ESRNN
 
-#list_hyperparameters = []
-#list_value_hyperparameters = []
 class bayesian_optimization():
     def __init__(self, train_dataset, categories, data_loader):
         self.train_dataset = train_dataset
@@ -31,22 +29,14 @@ class bayesian_optimization():
             #'dilations' :int(dilations),
             'input_window_length' :int(input_window_length),
         }
+        model = ESRNN(len(self.train_dataset), self.categories, config.params)
+        trainer = Trainer(model, self.data_loader, config.params)
+        return -trainer.train_epochs()
 
     def bayesian_optimizer(self):
-        bayesian_optimization.init_hyperparams(Trainer.amount_of_epochs,
-        Trainer.learning_rate,
-        Trainer.optimization_step_size,
-        Trainer.gamma_coefficient,
-        Trainer.ing_percentile,
-        Trainer.clip_value,
-        ESRNN.LSTM_size,
-        #ESRNN.dilations,
-        ESRNN.input_window_length,)
-        model = ESRNN(len(self.train_dataset), self.categories, config.params)
-        Trainer(model, self.data_loader, config.params).train_epochs()
         optimizer = BayesianOptimization(
-           f=-Trainer.train_epochs(),
+           f=self.init_hyperparams,
            pbounds=config.bounds,
-            random_state=1,)
+           random_state=1,)
         optimizer.maximize(init_points=10, n_iter=50)
 
