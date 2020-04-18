@@ -9,7 +9,7 @@ class bayesian_optimization():
         self.train_dataset = train_dataset
         self.categories = categories
         self.data_loader = data_loader
-    def init_hyperparams(amount_of_epochs,
+    def init_hyperparams(self, amount_of_epochs,
         learning_rate,
         optimization_step_size,
         gamma_coefficient,
