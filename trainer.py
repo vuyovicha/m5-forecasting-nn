@@ -3,6 +3,7 @@ import torch.nn as nn
 import time
 from pinball_loss import PinballLoss
 import os
+from bayes_opt import BayesianOptimization #INSTALL BAYESIAN OPTIMIZATION LIKE THIS
 
 
 class Trainer(nn.Module):
@@ -46,8 +47,8 @@ class Trainer(nn.Module):
     def train_batches(self):
         self.model.train()
         loss_epoch = 0
-        for batch, (train_dataset, val_dataset, indexes) in enumerate(self.data_loader):
-            print('Epoch % is here' % batch)
+        for batch, (train_dataset, val_dataset, indexes, categories) in enumerate(self.data_loader):
+            print('Batch % is here' % batch)
             loss_epoch += self.train_batch(train_dataset, val_dataset, indexes)
         loss_epoch = loss_epoch / (batch + 1)
         self.epochs += 1
@@ -56,9 +57,9 @@ class Trainer(nn.Module):
 
         return loss_epoch
 
-    def train_batch(self, train_dataset, val_dataset, indexes):  # removed mean square log difference from the model output
+    def train_batch(self, train_dataset, val_dataset, indexes, categories):  # removed mean square log difference from the model output
         self.optimization.zero_grad()
-        prediction_values, actual_values, _, _, _, _ = self.model(train_dataset, val_dataset, indexes)
+        prediction_values, actual_values, _, _, _, _ = self.model(train_dataset, val_dataset, indexes, categories)
         loss_batch = self.measure_pinball(prediction_values, actual_values)
         loss_batch.backward()
         nn.utils.clip_grad_value_(self.model.parameters(), self.clip_value)
@@ -80,7 +81,7 @@ class Trainer(nn.Module):
             # todo: also info cat is here - learn what is that
 
             loss_holdout = 0
-            for batch, (train_dataset, val_dataset, indexes) in enumerate(self.data_loader):
+            for batch, (train_dataset, val_dataset, indexes, categories) in enumerate(self.data_loader):
                 _, _, holdout_prediction, holdout_output, holdout_actual_values, holdout_actual_values_deseasonalized_normalized = self.model(
                     train_dataset, val_dataset, indexes)
                 loss_holdout += self.measure_pinball(holdout_output.unsqueeze(0).float(),

@@ -35,14 +35,12 @@ class ESRNN(nn.Module):
         self.residual_drnn = ResidualDRNN(self)
 
         self.categories_unique_headers = []
-        for i in range(categories.shape[1]):
-            self.categories_unique_headers.append(embedding_vectors_preparation.create_category_unique_headers(categories[:, i]))
+        for j in range(categories.shape[1]):
+            self.categories_unique_headers.append(embedding_vectors_preparation.create_category_unique_headers(categories, j))  # append the list of unique values of each category
 
         self.categories_embeddings = []
         for i in range(categories.shape[1]):
             self.categories_embeddings.append(embedding_vectors_preparation.create_category_embeddings(self.categories_unique_headers[i]))
-
-        self.total_dimensions = embedding_vectors_preparation.get_total_dimensions(self.categories_unique_headers)
 
         # todo set the range of embedding parameters
 
@@ -59,38 +57,41 @@ class ESRNN(nn.Module):
         self.state_id_category_embeddings = embedding_vectors_preparation.create_category_embeddings(self.state_id_category_unique_headers)
         """
 
-    def forward(self, train_dataset, val_dataset, indexes):
+    def forward(self, train_dataset, val_dataset, indexes, categories):
+        train_dataset = train_dataset.float()
+
         alpha_level = self.sigmoid(torch.stack([self.create_alpha_level[i] for i in indexes]).squeeze(1))
         gamma_seasonality = self.sigmoid(torch.stack([self.create_gamma_seasonality[i] for i in indexes]).squeeze(1))
         initial_seasonality_values = torch.stack([self.create_seasonality[i] for i in indexes])
-
         seasonalities = []
-        for i in range (self.seasonality_parameter):  # unclear totally
+        for i in range(self.seasonality_parameter):  # unclear totally, it's INITIAL seasonality!!
             seasonalities.append(torch.exp(initial_seasonality_values[:, i]))
         seasonalities.append(torch.exp(initial_seasonality_values[:, 0]))
 
-        train_dataset = train_dataset.float()
-
         levels = []
         difference_of_levels_log = []
-
         levels.append(train_dataset[:, 0] / seasonalities[0])  # why?
         for i in range(1, train_dataset.shape[1]):
             current_level = alpha_level * (train_dataset[:, i] / seasonalities[i]) + (1 - alpha_level) * levels[i - 1]
             levels.append(current_level)
             difference_of_levels_log.append(torch.log(current_level / levels[i - 1]))
             seasonalities.append(gamma_seasonality * (train_dataset[:, i] / current_level) + (1 - gamma_seasonality) * seasonalities[i])
-
         stacked_seasonalities = torch.stack(seasonalities).transpose(1, 0)
         stacked_levels = torch.stack(levels).transpose(1, 0)
-
         # mean_square_error = torch.mean(torch.stack([difference_of_levels_log[i] - difference_of_levels_log[i - 1] ** 2 for i in range(1, len(difference_of_levels_log))]))
-
         seasonality_extension_begin = stacked_seasonalities.shape[1] - self.seasonality_parameter
         seasonality_extension_end = seasonality_extension_begin - self.seasonality_parameter + self.output_window_length
         stacked_seasonalities = torch.cat((stacked_seasonalities, stacked_seasonalities[:, seasonality_extension_begin:seasonality_extension_end]), dim=1)
 
         # do a lookup here, we can compute what embedding to add for each TS only once, I think
+        input_categories = []
+        for i in indexes:
+            current_series_categories = []
+            for j in range(len(self.categories_unique_headers)):
+                current_category_index = self.categories_unique_headers[j].index(categories[i][j])
+                current_series_categories.extend(self.categories_embeddings[j][current_category_index].numpy())  # extend, not append
+            input_categories.append(torch.cat([current_series_categories]))
+
 
         input_windows = []
         output_windows = []
@@ -99,21 +100,19 @@ class ESRNN(nn.Module):
             input_window_begin = input_window_end - self.input_window_length
             deseasonalized_input_window = train_dataset[:, input_window_begin:input_window_end] / stacked_seasonalities[:, input_window_begin:input_window_end]
             normalized_input_window = deseasonalized_input_window / stacked_levels[:, i].unsqueeze(1)
-            # category should be here?
-            input_windows.append(normalized_input_window)
+            categorized_input_window = torch.cat((normalized_input_window, input_categories), dim=1)
+            input_windows.append(categorized_input_window)
 
             output_window_begin = i + 1
             output_window_end = output_window_begin + self.output_window_length
             if i < train_dataset.shape[1] - self.output_window_length:
                 deseasonalized_output_window = train_dataset[:, output_window_begin:output_window_end] / stacked_seasonalities[:, output_window_begin:output_window_end]
                 normalized_output_window = deseasonalized_output_window / stacked_levels[:, i].unsqueeze(1)
-                output_windows.append(normalized_input_window)
-
+                output_windows.append(normalized_output_window)
         window_input = torch.cat([i.unsqueeze(0) for i in input_windows], dim=0)
         window_output = torch.cat([i.unsqueeze(0) for i in output_windows], dim=0)
 
         self.train()  # tell everyone that training starts
-
         prediction_values = self.forward_rnn(window_input[:-self.output_window_length])
         actual_values = window_output  # compare network result with actual values, not predicting future here?
 
@@ -125,7 +124,6 @@ class ESRNN(nn.Module):
         holdout_actual_values = val_dataset  # there was a test dataset too in the legacy
         holdout_actual_values_deseasonalized = holdout_actual_values.float() / stacked_seasonalities[:, -self.output_window_length:]
         holdout_actual_values_deseasonalized_normalized = holdout_actual_values_deseasonalized / stacked_levels[:, -1].unsqueeze(1)
-
         self.train()
 
         return prediction_values, actual_values, holdout_prediction, holdout_output, holdout_actual_values, holdout_actual_values_deseasonalized_normalized
@@ -143,8 +141,9 @@ class ResidualDRNN(nn.Module):
         super(ResidualDRNN, self).__init__()
         layers = []
         dilations = ((1, 2), (2, 6))  # what is the len of this thing? maybe [1, 2, 2,6] or something
-
-        input_length = ESRNN.input_window_length + ESRNN.total_dimensions
+        # total_embedding_dimensions = embedding_vectors_preparation.get_total_dimensions(self.categories_unique_headers) todo don't foorget to uncomment
+        total_embedding_dimensions = 0
+        input_length = ESRNN.input_window_length + total_embedding_dimensions
         for i in range(len(dilations)):
             layer = DRNN(input_length, ESRNN.LSTM_size, len(dilations[i]), dilations[i], cell_type='LSTM')
             layers.append(layer)
