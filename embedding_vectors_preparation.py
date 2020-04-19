@@ -7,41 +7,19 @@ def get_embedding_vector_dimension(amount_of_unique_values):
     return min(amount_of_unique_values // 2, 50)
 
 
-def create_category_unique_headers(whole_dataset_categories, j):
-    whole_dataset_extracted_categories = extract_needed_category(whole_dataset_categories, j)
-    #category_unique_values = []
-    category_unique_values = np.unique(whole_dataset_extracted_categories)
-    """"
-    for i in range(len(whole_dataset_extracted_categories)):
-        if category_not_added(whole_dataset_categories[i], category_unique_values):
-            category_unique_values.append(whole_dataset_extracted_categories[i])
-    """
-    return np.array(category_unique_values)  # we can return no numpy array if needed, I think
-
-
-def extract_needed_category(whole_dataset_categories, j):
-    extracted_category = []
-    for i in range(len(whole_dataset_categories)):
-        extracted_category.append(whole_dataset_categories[i, j])
-    return np.array(extracted_category)
-
-
-def category_not_added(dataset_category_value, category_unique_values):
-    for i in range(len(category_unique_values)):
-        temp_category_unique_values = str(category_unique_values[i])
-        temp_dataset_category_value = str(dataset_category_value)
-        if temp_category_unique_values == temp_dataset_category_value:
-            return False
-        #if category_unique_values[i] == dataset_category_value:
-            #return False
-    return True
+def create_category_unique_headers(whole_dataset_categories):
+    category_unique_values = np.swapaxes(whole_dataset_categories, 0, 1)
+    for i in range (len(whole_dataset_categories)):
+        if not (whole_dataset_categories[i] in category_unique_values):
+            category_unique_values.append(whole_dataset_categories[i])
+    return np.array(category_unique_values)
 
 
 def create_category_embeddings(category_unique_headers):  # maybe the problem will occur - try to do this in the model init
     amount_of_unique_values = len(category_unique_headers)
     embedding_vector_dimension = get_embedding_vector_dimension(amount_of_unique_values)
     return [nn.Parameter(torch.ones(embedding_vector_dimension) * 0.001, requires_grad=True) for i in amount_of_unique_values]
-    # each unique value within one category gets torch.tensor of specified length - that means list of lists of tensors
+
 
 def get_total_dimensions(categories_unique_headers):
     sum_of_dimensions = 0
