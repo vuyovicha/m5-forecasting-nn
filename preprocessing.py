@@ -4,16 +4,15 @@ import statistics
 def read_file(file_path):
     with open (file_path, "r") as file:
         data = file.read().split("\n")
-
     series = []
     categories = []
-    for i in range (1, len(data) - 1):  #why -1?
+    for i in range(1, 31):
+    #for i in range (1, len(data) - 1):  #why -1?
         line = data[i].split(',')  # deleted replace(...)
-        categories.append(np.array([value for value in line[1:6]]))
+        categories.append([str(value) for value in line[1:6]])
         series.append(np.array([int(value) for value in line[6:] if value != ""]))
-
-    return np.array(series), np.array(categories)
-
+    return np.array(series), categories  # remove np from cat
+    #return np.array(series), categories
 
 def replace_zeroes(dataset):
     # print(*dataset[0], sep=", ")

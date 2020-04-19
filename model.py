@@ -2,9 +2,11 @@ import torch
 import torch.nn as nn
 from DilatedRNN import DRNN
 import embedding_vectors_preparation
+import numpy as np
+
 
 class ESRNN(nn.Module):
-    def __init__(self, train_dataset_len, categories):
+    def __init__(self, train_dataset_len, categories, params):
         super(ESRNN, self).__init__()
 
         # kind of an alpha and gamma parameters
@@ -15,8 +17,8 @@ class ESRNN(nn.Module):
         # PUT ALL CONFIGS INTO ONE FILE
         self.seasonality_parameter = 7  # why so? WHAT VALUE SHOULD BE HERE? 7 is seasonal period for monthly data
         self.output_window_length = 28  # == prediction_horizon
-        self.input_window_length = 28  # rule of thumb? todo: getting error on this
-        self.LSTM_size = 30  # I don't know what value should be here
+        self.input_window_length = params['input_window_length'] # rule of thumb? todo: getting error on this
+        self.LSTM_size = params['LSTM_size']  # I don't know what value should be here
 
         # smoothing parameters
         for i in range(train_dataset_len):
@@ -32,17 +34,21 @@ class ESRNN(nn.Module):
         self.linear_layer = nn.Linear(self.LSTM_size, self.LSTM_size)  # sizes of input and output sizes respectively
         self.tanh_activation_layer = nn.Tanh()
         self.scoring = nn.Linear(self.LSTM_size, self.output_window_length)  # have no idea what this is for
-        self.residual_drnn = ResidualDRNN(self)
+
 
         self.categories_unique_headers = []
-        for j in range(categories.shape[1]):
+        for j in range(len(categories[0])):
             self.categories_unique_headers.append(embedding_vectors_preparation.create_category_unique_headers(categories, j))  # append the list of unique values of each category
 
         self.categories_embeddings = []
-        for i in range(categories.shape[1]):
+        for i in range(len(categories[0])):
             self.categories_embeddings.append(embedding_vectors_preparation.create_category_embeddings(self.categories_unique_headers[i]))
 
+        self.all_categories = categories
+
         # todo set the range of embedding parameters
+
+        self.residual_drnn = ResidualDRNN(self)
 
         """"
         self.item_id_category_unique_headers = embedding_vectors_preparation.create_category_unique_headers(categories[:, 1])
@@ -88,9 +94,12 @@ class ESRNN(nn.Module):
         for i in indexes:
             current_series_categories = []
             for j in range(len(self.categories_unique_headers)):
-                current_category_index = self.categories_unique_headers[j].index(categories[i][j])
-                current_series_categories.extend(self.categories_embeddings[j][current_category_index].numpy())  # extend, not append
-            input_categories.append(torch.cat([current_series_categories]))
+                #current_category_index = embedding_vectors_preparation.get_category_index(self.categories_unique_headers[j], categories[i][j])
+                current_category_index = embedding_vectors_preparation.get_category_index(self.categories_unique_headers[j], self.all_categories[i][j])
+                current_series_categories.extend(self.categories_embeddings[j][current_category_index])  # extend, not append
+            #print(len(current_series_categories))
+            input_categories.append(current_series_categories)
+        input_categories = torch.tensor(input_categories)
 
 
         input_windows = []
@@ -141,8 +150,7 @@ class ResidualDRNN(nn.Module):
         super(ResidualDRNN, self).__init__()
         layers = []
         dilations = ((1, 2), (2, 6))  # what is the len of this thing? maybe [1, 2, 2,6] or something
-        # total_embedding_dimensions = embedding_vectors_preparation.get_total_dimensions(self.categories_unique_headers) todo don't foorget to uncomment
-        total_embedding_dimensions = 0
+        total_embedding_dimensions = embedding_vectors_preparation.get_total_dimensions(ESRNN.categories_unique_headers)  # todo don't forget to uncomment
         input_length = ESRNN.input_window_length + total_embedding_dimensions
         for i in range(len(dilations)):
             layer = DRNN(input_length, ESRNN.LSTM_size, len(dilations[i]), dilations[i], cell_type='LSTM')

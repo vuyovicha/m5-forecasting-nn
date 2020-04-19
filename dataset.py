@@ -1,5 +1,6 @@
 import torch
 from torch.utils.data import Dataset
+import numpy as np
 
 
 class DatasetTimeSeries(Dataset):
@@ -9,7 +10,10 @@ class DatasetTimeSeries(Dataset):
         self.categories = categories
 
     def __getitem__(self, index):
-        return self.train_dataset[index].to('cpu'), self.val_dataset[index].to('cpu'), index,  self.categories[index]
+        return self.train_dataset[index].to('cpu'), \
+               self.val_dataset[index].to('cpu'), \
+               index,  \
+               self.categories[index]
 
     def __len__(self):
         return len(self.train_dataset)

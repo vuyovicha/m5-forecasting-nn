@@ -3,32 +3,28 @@ import torch.nn as nn
 import time
 from pinball_loss import PinballLoss
 import os
-from bayes_opt import BayesianOptimization #INSTALL BAYESIAN OPTIMIZATION LIKE THIS
 
 
 class Trainer(nn.Module):
-    def __init__(self, model, data_loader):
+    def __init__(self, model, data_loader, params):
         super(Trainer, self).__init__()
         self.model = model
         self.data_loader = data_loader
-        self.amount_of_epochs = 16
-        self.learning_rate = 1e-3
+        self.amount_of_epochs = params['amount_of_epochs']
+        self.learning_rate = params['learning_rate']
         self.optimization = torch.optim.Adam(self.model.parameters(),
                                              self.learning_rate)  # do you remember nn.Parameter? https://arxiv.org/pdf/1412.6980.pdf
-        self.optimization_step_size = 5
-        self.gamma_coefficient = 0.5
-        self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimization, self.optimization_step_size,
-                                                         self.gamma_coefficient)
-
+        self.optimization_step_size = params['optimization_step_size']
+        self.gamma_coefficient = params['gamma_coefficient']
+        self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimization, self.optimization_step_size, self.gamma_coefficient)
         self.epochs = 0
-
-        self.training_percentile = 45
+        self.training_percentile = params['training_percentile']
         self.training_tau = self.training_percentile / 100
         self.batch_length = 1024
         self.output_window_length = 28
         self.measure_pinball = PinballLoss(self.training_tau, self.output_window_length * self.batch_length,
                                            'cpu')  # last parameter - device CHECK
-        self.clip_value = 23  # todo
+        self.clip_value = params['clip_value']  # todo
 
     def train_epochs(self):
         loss_max = 1e8
@@ -38,18 +34,21 @@ class Trainer(nn.Module):
             loss_epoch = self.train_batches()
             self.scheduler.step()  # changed the place of this scheduler (it adjusts the learning rate)
             if loss_epoch < loss_max:  # can we save just model parameters?
-                self.save_current_model()
+                #self.save_current_model()  # todo uncomment
                 loss_max = loss_epoch  # isn't it?
             loss_validation = self.validation()
             # we can save current model losses here
-        print('Training has taken: %5.1f minutes' % (time.time() - time_start) / 60)
+            print(loss_validation)
+            # print time here
+        return loss_validation
 
     def train_batches(self):
         self.model.train()
         loss_epoch = 0
         for batch, (train_dataset, val_dataset, indexes, categories) in enumerate(self.data_loader):
             print('Batch % is here' % batch)
-            loss_epoch += self.train_batch(train_dataset, val_dataset, indexes)
+            loss_epoch += self.train_batch(train_dataset, val_dataset, indexes, categories)
+            print(list(self.model.parameters()))
         loss_epoch = loss_epoch / (batch + 1)
         self.epochs += 1
 
@@ -79,11 +78,10 @@ class Trainer(nn.Module):
             actual_values = []
             prediction_values = []
             # todo: also info cat is here - learn what is that
-
             loss_holdout = 0
             for batch, (train_dataset, val_dataset, indexes, categories) in enumerate(self.data_loader):
                 _, _, holdout_prediction, holdout_output, holdout_actual_values, holdout_actual_values_deseasonalized_normalized = self.model(
-                    train_dataset, val_dataset, indexes)
+                    train_dataset, val_dataset, indexes, categories)
                 loss_holdout += self.measure_pinball(holdout_output.unsqueeze(0).float(),
                                                      holdout_actual_values_deseasonalized_normalized.unsqueeze(
                                                          0).float())

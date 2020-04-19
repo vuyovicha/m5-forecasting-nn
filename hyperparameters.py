@@ -1,14 +1,15 @@
-from bayes_opt import BayesianOptimization
 from trainer import Trainer
 import config
 from model import ESRNN
+from bayes_opt import BayesianOptimization
+
 
 class bayesian_optimization():
     def __init__(self, train_dataset, categories, data_loader):
         self.train_dataset = train_dataset
         self.categories = categories
         self.data_loader = data_loader
-        params = {}
+
     def init_hyperparams(self, amount_of_epochs,
         learning_rate,
         optimization_step_size,
@@ -18,6 +19,7 @@ class bayesian_optimization():
         LSTM_size,
         #dilations,
         input_window_length,):
+
         params = {
             'amount_of_epochs':int(amount_of_epochs),
             'learning_rate':learning_rate,
@@ -27,8 +29,13 @@ class bayesian_optimization():
             'clip_value':int(clip_value),
             'LSTM_size':int(LSTM_size),
             #'dilations' :int(dilations),
-            'input_window_length' :int(input_window_length),
+            'input_window_length':int(input_window_length),
         }
+        for name, value in params.items():
+            print(name)
+            print(value)
+            print()
+
         model = ESRNN(len(self.train_dataset), self.categories, params)
         trainer = Trainer(model, self.data_loader, params)
         return -trainer.train_epochs()
