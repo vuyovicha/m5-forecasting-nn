@@ -2,33 +2,32 @@ import torch
 import torch.nn as nn
 import time
 from pinball_loss import PinballLoss
-import config
 
 
 
 class Trainer(nn.Module):
-    def __init__(self, model, data_loader):
+    def __init__(self, model, data_loader,params):
         super(Trainer, self).__init__()
         self.model = model
         self.data_loader = data_loader
-        self.amount_of_epochs = config.params_init_val['amount_of_epochs']#16
-        self.learning_rate = config.params_init_val['learning_rate']#1e-3
+        self.amount_of_epochs = params['amount_of_epochs']#16
+        self.learning_rate = params['learning_rate']#1e-3
         self.optimization = torch.optim.Adam(self.model.parameters(),
                                              self.learning_rate)  # do you remember nn.Parameter? https://arxiv.org/pdf/1412.6980.pdf
-        self.optimization_step_size = config.params_init_val['optimization_step_size']#5
-        self.gamma_coefficient = config.params_init_val['gamma_coefficient']#0.5
+        self.optimization_step_size = params['optimization_step_size']#5
+        self.gamma_coefficient = params['gamma_coefficient']#0.5
         self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimization, self.optimization_step_size,
                                                          self.gamma_coefficient)
 
         self.epochs = 0
 
-        self.training_percentile = config.params_init_val['training_percentile']#45
+        self.training_percentile = params['training_percentile']#45
         self.training_tau = self.training_percentile / 100
         self.batch_length = 1024
         self.output_window_length = 28
         self.measure_pinball = PinballLoss(self.training_tau, self.output_window_length * self.batch_length,
                                            'cpu')  # last parameter - device CHECK
-        self.clip_value = config.params_init_val['clip_value']#23  # todo
+        self.clip_value = params['clip_value']#23  # todo
 
     def train_epochs(self):
         loss_max = 1e8

@@ -8,7 +8,7 @@ params_init_val = {'amount_of_epochs': 16,
             'LSTM_size':int(30),
             #'dilations' :((1, 2), (2, 6)),
             'input_window_length' :int(28),}
-params = {}
+#params = {}
 bounds = {
             'amount_of_epochs': (10, 50),
             'learning_rate': (1e-10, 1e-1),

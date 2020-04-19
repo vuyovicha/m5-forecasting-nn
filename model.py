@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 from DilatedRNN import DRNN
 import embedding_vectors_preparation
-import config
 
 class ESRNN(nn.Module):
     def __init__(self, train_dataset_len, categories, params):
@@ -16,8 +15,8 @@ class ESRNN(nn.Module):
         # PUT ALL CONFIGS INTO ONE FILE
         self.seasonality_parameter = 7  # why so? WHAT VALUE SHOULD BE HERE? 7 is seasonal period for monthly data
         self.output_window_length = 28  # == prediction_horizon
-        self.input_window_length = config.params_init_val['input_window_length']  # 28 rule of thumb? todo: getting error on this
-        self.LSTM_size = config.params_init_val['LSTM_size']  # 30 I don't know what value should be here
+        self.input_window_length = params['input_window_length']  # 28 rule of thumb? todo: getting error on this
+        self.LSTM_size = params['LSTM_size']  # 30 I don't know what value should be here
 
         # smoothing parameters
         for i in range(train_dataset_len):
