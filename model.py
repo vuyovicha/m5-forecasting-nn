@@ -35,7 +35,6 @@ class ESRNN(nn.Module):
         self.tanh_activation_layer = nn.Tanh()
         self.scoring = nn.Linear(self.LSTM_size, self.output_window_length)  # have no idea what this is for
 
-
         self.categories_unique_headers = []
         for j in range(len(categories[0])):
             self.categories_unique_headers.append(embedding_vectors_preparation.create_category_unique_headers(categories, j))  # append the list of unique values of each category
@@ -46,21 +45,11 @@ class ESRNN(nn.Module):
 
         self.all_categories = categories
 
-        # todo set the range of embedding parameters
-
         self.residual_drnn = ResidualDRNN(self)
 
         """"
         self.item_id_category_unique_headers = embedding_vectors_preparation.create_category_unique_headers(categories[:, 1])
         self.item_id_category_embedding = embedding_vectors_preparation.create_category_embeddings(self.item_id_category_unique_headers)
-        self.dept_id_category_unique_headers = embedding_vectors_preparation.create_category_unique_headers(categories[:, 2])
-        self.dept_id_category_embedding = embedding_vectors_preparation.create_category_embeddings(self.dept_id_category_unique_headers)
-        self.cat_id_category_unique_headers = embedding_vectors_preparation.create_category_unique_headers(categories[:, 3])
-        self.cat_id_category_embedding = embedding_vectors_preparation.create_category_embeddings(self.cat_id_category_embedding)
-        self.store_id_category_unique_headers = embedding_vectors_preparation.create_category_unique_headers(categories[:, 4])
-        self.store_id_category_embeddings = embedding_vectors_preparation.create_category_embeddings(self.store_id_category_unique_headers)
-        self.state_id_category_unique_headers = embedding_vectors_preparation.create_category_unique_headers(categories[:, 5])
-        self.state_id_category_embeddings = embedding_vectors_preparation.create_category_embeddings(self.state_id_category_unique_headers)
         """
 
     def forward(self, train_dataset, val_dataset, indexes, categories):
@@ -69,6 +58,7 @@ class ESRNN(nn.Module):
         alpha_level = self.sigmoid(torch.stack([self.create_alpha_level[i] for i in indexes]).squeeze(1))
         gamma_seasonality = self.sigmoid(torch.stack([self.create_gamma_seasonality[i] for i in indexes]).squeeze(1))
         initial_seasonality_values = torch.stack([self.create_seasonality[i] for i in indexes])
+
         seasonalities = []
         for i in range(self.seasonality_parameter):  # unclear totally, it's INITIAL seasonality!!
             seasonalities.append(torch.exp(initial_seasonality_values[:, i]))
@@ -89,6 +79,10 @@ class ESRNN(nn.Module):
         seasonality_extension_end = seasonality_extension_begin - self.seasonality_parameter + self.output_window_length
         stacked_seasonalities = torch.cat((stacked_seasonalities, stacked_seasonalities[:, seasonality_extension_begin:seasonality_extension_end]), dim=1)
 
+        for i in range(len(self.categories_embeddings)):
+            for j in range(len(self.categories_embeddings[i])):
+                self.categories_embeddings[i][j] = self.tanh_activation_layer(self.categories_embeddings[i][j])  # do values of the list change under tanh? todo
+
         # do a lookup here, we can compute what embedding to add for each TS only once, I think
         input_categories = []
         for i in indexes:
@@ -100,7 +94,6 @@ class ESRNN(nn.Module):
             #print(len(current_series_categories))
             input_categories.append(current_series_categories)
         input_categories = torch.tensor(input_categories)
-
 
         input_windows = []
         output_windows = []

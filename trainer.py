@@ -48,7 +48,7 @@ class Trainer(nn.Module):
         for batch, (train_dataset, val_dataset, indexes, categories) in enumerate(self.data_loader):
             print('Batch % is here' % batch)
             loss_epoch += self.train_batch(train_dataset, val_dataset, indexes, categories)
-            print(list(self.model.parameters()))
+            #print(list(self.model.parameters()))
         loss_epoch = loss_epoch / (batch + 1)
         self.epochs += 1
 

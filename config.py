@@ -11,7 +11,7 @@ params_init_val = {
 }
 
 bounds = {
-            'amount_of_epochs': (10, 50),
+            'amount_of_epochs': (10, 20), # todo set the bounds
             'learning_rate': (1e-10, 1e-1),
             'optimization_step_size': (0, 10),
             'gamma_coefficient': (0, 1),
