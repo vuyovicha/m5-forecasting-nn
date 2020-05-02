@@ -38,15 +38,18 @@ class Trainer(nn.Module):
                 loss_max = loss_epoch  # isn't it?
             loss_validation = self.validation()
             # we can save current model losses here
-            print(loss_validation)
+            print('Training_loss: %d' % loss_epoch)
+            print('Validation_loss: %d' % loss_validation)
+            print()
             # print time here
-        return loss_validation
+        return loss_validation  # should we know parameters and what not to generate predictions?
 
     def train_batches(self):
         self.model.train()
         loss_epoch = 0
         for batch, (train_dataset, val_dataset, indexes, categories) in enumerate(self.data_loader):
-            print('Batch % is here' % batch)
+            print()
+            print('Batch %d is here' % batch)
             loss_epoch += self.train_batch(train_dataset, val_dataset, indexes, categories)
             #print(list(self.model.parameters()))
         loss_epoch = loss_epoch / (batch + 1)
@@ -61,6 +64,9 @@ class Trainer(nn.Module):
         prediction_values, actual_values, _, _, _, _ = self.model(train_dataset, val_dataset, indexes, categories)
         loss_batch = self.measure_pinball(prediction_values, actual_values)
         loss_batch.backward()
+        #print("PARAMS")
+        #for param in self.model.parameters():
+            #print(param)
         nn.utils.clip_grad_value_(self.model.parameters(), self.clip_value)
         self.optimization.step()
         return float(loss_batch)
@@ -85,7 +91,13 @@ class Trainer(nn.Module):
                 loss_holdout += self.measure_pinball(holdout_output.unsqueeze(0).float(),
                                                      holdout_actual_values_deseasonalized_normalized.unsqueeze(
                                                          0).float())
-                prediction_values.extend(holdout_prediction.view(-1).cpu().detach().numpy())
+                #print("LET'S SEE")
+                #print(self.measure_pinball(holdout_prediction.unsqueeze(0).float(), holdout_actual_values.unsqueeze(0).float()))
+                #if batch == 0:
+                    #print(holdout_prediction)
+                    #print()
+                    #print(holdout_actual_values)
+                prediction_values.extend(holdout_prediction.view(-1).cpu().detach().numpy())  # do not this I think
                 actual_values.extend(holdout_actual_values.view(-1).cpu().detach().numpy())  # what is this?
                 # infocat
             loss_holdout = loss_holdout / (batch + 1)

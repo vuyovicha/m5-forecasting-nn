@@ -4,7 +4,6 @@ import numpy as np
 
 
 class PinballLoss(nn.Module):
-
     def __init__(self, training_tau, output_size, device):
         super(PinballLoss, self).__init__()
         self.training_tau = training_tau

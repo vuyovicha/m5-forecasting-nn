@@ -7,7 +7,8 @@ params_init_val = {
             'clip_value': int(23),
             'LSTM_size': int(30),
             #'dilations' :((1, 2), (2, 6)),
-            'input_window_length': int(28)
+            'input_window_length': int(28),
+            'batch_size': int(10)
 }
 
 bounds = {
