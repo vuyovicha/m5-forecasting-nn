@@ -39,29 +39,22 @@ class ESRNN(nn.Module):
         for j in range(len(categories[0])):
             self.categories_unique_headers.append(embedding_vectors_preparation.create_category_unique_headers(categories, j))  # append the list of unique values of each category
 
-        self.categories_embeddings = []
+        categories_embeddings = []
+        self.categories_starting_indexes = []
         for i in range(len(categories[0])):
-            amount_of_unique_values = len(self.categories_unique_headers[i])
-            embedding_vector_dimension = embedding_vectors_preparation.get_embedding_vector_dimension(amount_of_unique_values)
-            current_embedding_list = [0.001 for j in range(embedding_vector_dimension)]
-            self.categories_embeddings.append([nn.Parameter(torch.Tensor(current_embedding_list), requires_grad=True) for z in range(amount_of_unique_values)])
-            #self.categories_embeddings.append(nn.ParameterList([nn.Parameter(torch.Tensor(current_embedding_list), requires_grad=True) for z in range(amount_of_unique_values)]))
-
-        create_test_params = []
-        for z in range(train_dataset_len):
-            create_test_params.append(nn.Parameter(torch.Tensor([0.6]), requires_grad=True))  # current_embedding_list
-        self.test_params = nn.ParameterList(create_test_params)
-        print(self.test_params[0])
-        #self.categories_embeddings = nn.ParameterList(self.create_categories_embeddings)
+            current_amount_of_unique_values = len(self.categories_unique_headers[i])
+            current_embedding_vector_dimension = embedding_vectors_preparation.get_embedding_vector_dimension(current_amount_of_unique_values)
+            current_embedding_list_for_tensor = [0.001 for j in range(current_embedding_vector_dimension)]
+            for j in range(current_amount_of_unique_values):
+                categories_embeddings.append(nn.Parameter(torch.Tensor(current_embedding_list_for_tensor), requires_grad=True))
+                if j == 0:
+                    self.categories_starting_indexes.append(len(categories_embeddings) - 1)
+        self.categories_embeddings = nn.ParameterList(categories_embeddings)
 
         self.all_categories = categories
         self.residual_drnn = ResidualDRNN(self)
 
-        self.my_parameter = nn.Parameter(torch.Tensor([0.001]), requires_grad=True)
-
     def forward(self, train_dataset, val_dataset, indexes, categories):
-        #print(self.my_parameter)
-        #print(self.categories_embeddings[0][0])
         train_dataset = train_dataset.float()
 
         alpha_level = self.sigmoid(torch.stack([self.create_alpha_level[i] for i in indexes]).squeeze(1))
@@ -88,44 +81,29 @@ class ESRNN(nn.Module):
         seasonality_extension_end = seasonality_extension_begin - self.seasonality_parameter + self.output_window_length
         stacked_seasonalities = torch.cat((stacked_seasonalities, stacked_seasonalities[:, seasonality_extension_begin:seasonality_extension_end]), dim=1)
 
-        # tanh activation here
-        """""
+        categories_embeddings = []
         for i in range(len(self.categories_embeddings)):
-            for j in range(len(self.categories_embeddings[i])):
-                self.categories_embeddings[i][j] = self.tanh_activation_layer(self.categories_embeddings[i][j])  # do values of the list change under tanh? todo
-        """""
+            categories_embeddings.append(self.tanh_activation_layer(self.categories_embeddings[i]))
 
         input_categories_list = []
         for j in indexes:
             current_series_categories = []
             for k in range(len(self.categories_unique_headers)):
                 current_category_index = embedding_vectors_preparation.get_category_index(self.categories_unique_headers[k], self.all_categories[j][k])
-                current_series_categories.append(self.categories_embeddings[k][current_category_index])  # extend or append? does it matter?
+                current_series_categories.append(categories_embeddings[current_category_index + self.categories_starting_indexes[k]])
+                # current_series_categories.append(self.categories_embeddings[current_category_index + self.categories_starting_indexes[k]])  # extend or append? does it matter?
             input_categories_list.append(torch.cat([i.unsqueeze(0) for i in current_series_categories], dim=1).squeeze())
-            #if j == indexes[0]:
-                #print(current_series_categories)
-                #print(input_categories_list[0])
         input_categories = torch.cat([i.unsqueeze(0) for i in input_categories_list], dim=0)  # squeeze or unsqueeze?
-        #print(input_categories)
 
         input_windows = []
         output_windows = []
-        current_list = []
         for i in range(self.input_window_length - 1, train_dataset.shape[1]):
             input_window_end = i + 1
             input_window_begin = input_window_end - self.input_window_length
             deseasonalized_input_window = train_dataset[:, input_window_begin:input_window_end] / stacked_seasonalities[:, input_window_begin:input_window_end]
             normalized_input_window = deseasonalized_input_window / stacked_levels[:, i].unsqueeze(1)
             categorized_input_window = torch.cat((normalized_input_window, input_categories), dim=1)
-
-
-            for j in indexes:
-                current_list.append(torch.cat((categorized_input_window[j % 10], self.my_parameter), dim=0))
-            input_windows.append(torch.cat([i.unsqueeze(0) for i in current_list], dim=0))
-            current_list = []
-
-
-            #input_windows.append(categorized_input_window)
+            input_windows.append(categorized_input_window)
 
             output_window_begin = i + 1
             output_window_end = output_window_begin + self.output_window_length
@@ -139,7 +117,6 @@ class ESRNN(nn.Module):
 
         self.train()  # tell everyone that training starts
         prediction_values = self.forward_rnn(window_input[:-self.output_window_length])
-        #print(self.categories_embeddings[0][0])
         #print(prediction_values)
         actual_values = window_output  # compare network result with actual values, not predicting future here?
 
@@ -169,9 +146,9 @@ class ResidualDRNN(nn.Module):
         super(ResidualDRNN, self).__init__()
         layers = []
         dilations = ((1, 2), (2, 6))  # what is the len of this thing? maybe [1, 2, 2,6] or something
-        total_embedding_dimensions = embedding_vectors_preparation.get_total_dimensions(ESRNN.categories_unique_headers)  # todo don't forget to uncomment
-        #input_length = ESRNN.input_window_length + total_embedding_dimensions
-        input_length = ESRNN.input_window_length + 1 + total_embedding_dimensions
+        total_embedding_dimensions = embedding_vectors_preparation.get_total_dimensions(ESRNN.categories_unique_headers)
+        input_length = ESRNN.input_window_length + total_embedding_dimensions
+        #input_length = ESRNN.input_window_length
         for i in range(len(dilations)):
             layer = DRNN(input_length, ESRNN.LSTM_size, len(dilations[i]), dilations[i], cell_type='LSTM')
             layers.append(layer)
