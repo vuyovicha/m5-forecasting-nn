@@ -4,7 +4,7 @@ import numpy as np
 
 
 def get_embedding_vector_dimension(amount_of_unique_values):
-    dimension = min(amount_of_unique_values // 2, 50)
+    dimension = min((amount_of_unique_values + 1) // 2, 50)
     if dimension == 0:
         return 1
     else:

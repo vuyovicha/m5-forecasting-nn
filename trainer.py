@@ -88,15 +88,8 @@ class Trainer(nn.Module):
             for batch, (train_dataset, val_dataset, indexes, categories) in enumerate(self.data_loader):
                 _, _, holdout_prediction, holdout_output, holdout_actual_values, holdout_actual_values_deseasonalized_normalized = self.model(
                     train_dataset, val_dataset, indexes, categories)
-                loss_holdout += self.measure_pinball(holdout_output.unsqueeze(0).float(),
-                                                     holdout_actual_values_deseasonalized_normalized.unsqueeze(
-                                                         0).float())
-                #print("LET'S SEE")
-                #print(self.measure_pinball(holdout_prediction.unsqueeze(0).float(), holdout_actual_values.unsqueeze(0).float()))
-                #if batch == 0:
-                    #print(holdout_prediction)
-                    #print()
-                    #print(holdout_actual_values)
+                # TODO we should measure holdout_output last value with actual deseas and norm values
+                loss_holdout += self.measure_pinball(holdout_output.unsqueeze(0).float(), holdout_actual_values_deseasonalized_normalized.unsqueeze(0).float())
                 prediction_values.extend(holdout_prediction.view(-1).cpu().detach().numpy())  # do not this I think
                 actual_values.extend(holdout_actual_values.view(-1).cpu().detach().numpy())  # what is this?
                 # infocat
