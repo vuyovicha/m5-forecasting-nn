@@ -33,8 +33,8 @@ class ESRNN(nn.Module):
         self.sigmoid = nn.Sigmoid()
         self.linear_layer = nn.Linear(self.LSTM_size, self.LSTM_size)  # sizes of input and output sizes respectively
         self.tanh_activation_layer = nn.Tanh()
-        #self.scoring = nn.Linear(self.LSTM_size, self.output_window_length)  # TODO do not forget to uncomment
-        self.scoring = nn.Linear(self.LSTM_size, 1)
+        self.scoring = nn.Linear(self.LSTM_size, self.output_window_length)  # TODO do not forget to uncomment
+        #self.scoring = nn.Linear(self.LSTM_size, 1)
 
         self.categories_unique_headers = []
         for j in range(len(categories[0])):
@@ -223,6 +223,7 @@ class ESRNN(nn.Module):
                 output_windows.append(normalized_output_window)
 
         """""
+        # the first version: 28 days windowing and whole TS embeddings
         input_windows = []
         output_windows = []
         for i in range(self.input_window_length - 1, train_dataset.shape[1]):
