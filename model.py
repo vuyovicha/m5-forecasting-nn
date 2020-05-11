@@ -2,13 +2,13 @@ import torch
 import torch.nn as nn
 from DilatedRNN import DRNN
 import embedding_vectors_preparation
-import numpy as np
 
 
 class ESRNN(nn.Module):
-    def __init__(self, train_dataset_len, categories, time_categories, params):
+    def __init__(self, train_dataset_len, categories, time_categories, params, prices_dataset):
         super(ESRNN, self).__init__()
         self.params = params
+        self.prices_dataset = prices_dataset
 
         # kind of an alpha and gamma parameters
         create_alpha_level = []
@@ -16,7 +16,7 @@ class ESRNN(nn.Module):
         create_seasonality = []
 
         self.seasonality_parameter = 7  # why so? WHAT VALUE SHOULD BE HERE? 7 is seasonal period for monthly data
-        self.output_window_length = 28  # == prediction_horizon
+        self.output_window_length = params['output_window_length']  # == prediction_horizon
         self.input_window_length = params['input_window_length']  # rule of thumb?
         self.LSTM_size = params['LSTM_size']  # I don't know what value should be here
 
@@ -33,8 +33,8 @@ class ESRNN(nn.Module):
         self.sigmoid = nn.Sigmoid()
         self.linear_layer = nn.Linear(self.LSTM_size, self.LSTM_size)  # sizes of input and output sizes respectively
         self.tanh_activation_layer = nn.Tanh()
-        self.scoring = nn.Linear(self.LSTM_size, self.output_window_length)  # TODO do not forget to uncomment
-        #self.scoring = nn.Linear(self.LSTM_size, 1)
+        #self.scoring = nn.Linear(self.LSTM_size, self.output_window_length)
+        self.scoring = nn.Linear(self.LSTM_size, 1)
 
         self.categories_unique_headers = []
         for j in range(len(categories[0])):
@@ -72,7 +72,7 @@ class ESRNN(nn.Module):
 
         self.residual_drnn = ResidualDRNN(self)
 
-    def forward(self, train_dataset, val_dataset, indexes, categories):
+    def forward(self, train_dataset, val_dataset, indexes, categories, validation=False, training_without_val_dataset=False):
         train_dataset = train_dataset.float()
 
         categories_embeddings = []
@@ -93,7 +93,7 @@ class ESRNN(nn.Module):
             time_categories_embeddings.append(self.tanh_activation_layer(self.time_categories_embeddings[i]))
 
         input_time_categories_list = []
-        for j in range(train_dataset.shape[1]):
+        for j in range(len(self.all_time_categories)):
             current_day_categories = []
             for k in range(len(self.time_categories_unique_headers)):
                 current_day_category_index = embedding_vectors_preparation.get_category_index(self.time_categories_unique_headers[k], self.all_time_categories[j][k])
@@ -101,8 +101,6 @@ class ESRNN(nn.Module):
             input_time_categories_list.append(torch.cat([i.unsqueeze(0) for i in current_day_categories], dim=1).squeeze())
         input_time_categories = torch.cat([i.unsqueeze(0) for i in input_time_categories_list], dim=0)
 
-        # from this line
-        """""
         alpha_level = self.sigmoid(torch.stack([self.create_alpha_level[i] for i in indexes]).squeeze(1))
         gamma_seasonality = self.sigmoid(torch.stack([self.create_gamma_seasonality[i] for i in indexes]).squeeze(1))
         initial_seasonality_values = torch.stack([self.create_seasonality[i] for i in indexes])
@@ -131,49 +129,98 @@ class ESRNN(nn.Module):
         output_values = []
         for i in range(train_dataset.shape[1]):
             deseasonalized_input_value = train_dataset[:, i] / stacked_seasonalities[:, i]
-            normalized_input_value = deseasonalized_input_value / stacked_levels[:, i]  # .unsqueeze(1)  # do not think that unsqueeze is necessary here
+            normalized_input_value = deseasonalized_input_value / stacked_levels[:, i]
             categorized_input_value = torch.cat((normalized_input_value.unsqueeze(1), input_categories), dim=1)
-            input_values.append(categorized_input_value)
+            multiply_input_time_categories = torch.cat([input_time_categories[i + 1].unsqueeze(0) for j in range(len(train_dataset))], dim=0)  # concatenating FOLLOWING time stamp category
+            time_categorized_input_value = torch.cat((categorized_input_value, multiply_input_time_categories), dim=1)
+            input_values.append(time_categorized_input_value)
 
             if i < train_dataset.shape[1] - 1:
                 deseasonalized_output_value = train_dataset[:, i + 1] / stacked_seasonalities[:, i + 1]
-                normalized_output_value = deseasonalized_output_value / stacked_levels[:, i]  # .unsqueeze(1)  # TODO why is here the same index - do we need unaqueeze?
+                normalized_output_value = deseasonalized_output_value / stacked_levels[:, i]  # .unsqueeze(1)  # TODO why is here the same index - do we need unsqueeze?
                 output_values.append(normalized_output_value.unsqueeze(1))
 
         cat_input_values = torch.cat([i.unsqueeze(0) for i in input_values], dim=0)
-        cat_output_values = torch.cat([i.unsqueeze(0) for i in output_values], dim=0)
+        cat_output_values = torch.cat([i.unsqueeze(0) for i in output_values], dim=0)  # shape 0 == 1884
 
         self.train()
-        prediction_values = self.forward_rnn(cat_input_values[:-1])
+        prediction_values = self.forward_rnn(cat_input_values[:-1])  # shape 0 == 1884
         actual_values = cat_output_values
 
-        self.eval()
-        current_holdout_output = self.forward_rnn(cat_input_values)
-        holdout_output = []
-        holdout_output.append(current_holdout_output[-1])
-        for i in range(self.output_window_length - 1):
-            input_values.append(torch.cat((holdout_output[-1], input_categories), dim=1))
-            cat_input_values = torch.cat([i.unsqueeze(0) for i in input_values], dim=0)
+        if validation:
+            self.eval()
+            prediction_timestamps_indexes = []
             current_holdout_output = self.forward_rnn(cat_input_values)
+            holdout_output = []
             holdout_output.append(current_holdout_output[-1])
+            for i in range(self.output_window_length - 1):
+                prediction_timestamps_indexes.append(train_dataset.shape[1] + i)
+                multiply_input_time_categories = torch.cat([input_time_categories[train_dataset.shape[1] + i + 1].unsqueeze(0) for j in range(len(train_dataset))], dim=0)
+                categorized_input_value = torch.cat((holdout_output[-1], input_categories), dim=1)
+                input_values.append(torch.cat((categorized_input_value, multiply_input_time_categories), dim=1))
+                cat_input_values = torch.cat([j.unsqueeze(0) for j in input_values], dim=0)
+                current_holdout_output = self.forward_rnn(cat_input_values)
+                holdout_output.append(current_holdout_output[-1])
+            prediction_timestamps_indexes.append(train_dataset.shape[1] + self.output_window_length - 1)
+            holdout_output_stack = torch.stack(holdout_output).transpose(1, 0)
+            holdout_output_cat_list = []
+            for i in range(len(holdout_output_stack)):
+                holdout_output_cat_list.append(torch.cat([j for j in holdout_output_stack[i]]))
+            holdout_output_cat = torch.cat([i.unsqueeze(0) for i in holdout_output_cat_list], dim=0)
 
-        holdout_output_stack = torch.stack(holdout_output).transpose(1, 0)
-        holdout_output_cat_list = []
-        for i in range(len(holdout_output_stack)):
-            holdout_output_cat_list.append(torch.cat([j for j in holdout_output_stack[i]]))
-        holdout_output_cat = torch.cat([i.unsqueeze(0) for i in holdout_output_cat_list], dim=0)
-        # holdout_output_cat = self.tranform_list(holdout_output_stack)
-        holdout_output_cat_reseasonalized = holdout_output_cat * stacked_seasonalities[:, -self.output_window_length:]
-        holdout_output_cat_renormalized = holdout_output_cat_reseasonalized * stacked_levels[:, -1].unsqueeze(1)
-        holdout_prediction = holdout_output_cat_renormalized * torch.gt(holdout_output_cat_renormalized, 0).float()
-        holdout_actual_values = val_dataset
-        holdout_actual_values_deseasonalized = holdout_actual_values.float() / stacked_seasonalities[:, -self.output_window_length:]
-        holdout_actual_values_deseasonalized_normalized = holdout_actual_values_deseasonalized / stacked_levels[:, -1].unsqueeze(1)
-        self.train()
+            holdout_output_cat_reseasonalized = holdout_output_cat * stacked_seasonalities[:, -self.output_window_length:]
+            holdout_output_cat_renormalized = holdout_output_cat_reseasonalized * stacked_levels[:, -1].unsqueeze(1)
+            holdout_prediction = holdout_output_cat_renormalized * torch.gt(holdout_output_cat_renormalized, 0).float()
+            current_timestamp_index = 0
+            for i in range(prediction_timestamps_indexes[0], prediction_timestamps_indexes[0] + len(prediction_timestamps_indexes)):
+                for j in indexes:
+                    if self.prices_dataset[j, i] == 0:
+                        holdout_prediction[j % self.params['batch_size'], current_timestamp_index] = 0
+                current_timestamp_index += 1
 
-        return prediction_values, actual_values, holdout_prediction, holdout_output_cat, holdout_actual_values, holdout_actual_values_deseasonalized_normalized
+            if training_without_val_dataset:
+                return holdout_prediction
+
+            holdout_actual_values = val_dataset
+            holdout_actual_values_deseasonalized = holdout_actual_values.float() / stacked_seasonalities[:, -self.output_window_length:]
+            holdout_actual_values_deseasonalized_normalized = holdout_actual_values_deseasonalized / stacked_levels[:, -1].unsqueeze(1)
+            self.train()
+
+            return prediction_values, actual_values, holdout_prediction, holdout_output_cat, holdout_actual_values, holdout_actual_values_deseasonalized_normalized
+
+        else:
+            return prediction_values, actual_values
+
+
         """""
+        train_dataset = train_dataset.float()
 
+        categories_embeddings = []
+        for i in range(len(self.categories_embeddings)):
+            categories_embeddings.append(self.tanh_activation_layer(self.categories_embeddings[i]))
+
+        input_categories_list = []
+        for j in indexes:
+            current_series_categories = []
+            for k in range(len(self.categories_unique_headers)):
+                current_category_index = embedding_vectors_preparation.get_category_index(self.categories_unique_headers[k], self.all_categories[j][k])
+                current_series_categories.append(categories_embeddings[current_category_index + self.categories_starting_indexes[k]])
+            input_categories_list.append(torch.cat([i.unsqueeze(0) for i in current_series_categories], dim=1).squeeze())
+        input_categories = torch.cat([i.unsqueeze(0) for i in input_categories_list], dim=0)  # squeeze or unsqueeze?
+
+        time_categories_embeddings = []
+        for i in range(len(self.time_categories_embeddings)):
+            time_categories_embeddings.append(self.tanh_activation_layer(self.time_categories_embeddings[i]))
+
+        input_time_categories_list = []
+        for j in range(train_dataset.shape[1]):
+            current_day_categories = []
+            for k in range(len(self.time_categories_unique_headers)):
+                current_day_category_index = embedding_vectors_preparation.get_category_index(self.time_categories_unique_headers[k], self.all_time_categories[j][k])
+                current_day_categories.append(time_categories_embeddings[current_day_category_index + self.time_categories_starting_indexes[k]])
+            input_time_categories_list.append(torch.cat([i.unsqueeze(0) for i in current_day_categories], dim=1).squeeze())
+        input_time_categories = torch.cat([i.unsqueeze(0) for i in input_time_categories_list], dim=0)
+        
         alpha_level = self.sigmoid(torch.stack([self.create_alpha_level[i] for i in indexes]).squeeze(1))
         gamma_seasonality = self.sigmoid(torch.stack([self.create_gamma_seasonality[i] for i in indexes]).squeeze(1))
         initial_seasonality_values = torch.stack([self.create_seasonality[i] for i in indexes])
@@ -222,26 +269,26 @@ class ESRNN(nn.Module):
                 normalized_output_window = deseasonalized_output_window / stacked_levels[:, i].unsqueeze(1)
                 output_windows.append(normalized_output_window)
 
-        """""
-        # the first version: 28 days windowing and whole TS embeddings
-        input_windows = []
-        output_windows = []
-        for i in range(self.input_window_length - 1, train_dataset.shape[1]):
-            input_window_end = i + 1
-            input_window_begin = input_window_end - self.input_window_length
-            deseasonalized_input_window = train_dataset[:, input_window_begin:input_window_end] / stacked_seasonalities[:, input_window_begin:input_window_end]
-            normalized_input_window = deseasonalized_input_window / stacked_levels[:, i].unsqueeze(1)
-            categorized_input_window = torch.cat((normalized_input_window, input_categories), dim=1)
-            input_windows.append(categorized_input_window)
 
-            output_window_begin = i + 1
-            output_window_end = output_window_begin + self.output_window_length
-            if i < train_dataset.shape[1] - self.output_window_length:
-                deseasonalized_output_window = train_dataset[:, output_window_begin:output_window_end] / stacked_seasonalities[:, output_window_begin:output_window_end]
-                normalized_output_window = deseasonalized_output_window / stacked_levels[:, i].unsqueeze(1)
-                output_windows.append(normalized_output_window)
+        # the first version: 28 days windowing and whole TS embeddings
+        #input_windows = []
+        #output_windows = []
+        #for i in range(self.input_window_length - 1, train_dataset.shape[1]):
+            #input_window_end = i + 1
+            #input_window_begin = input_window_end - self.input_window_length
+            #deseasonalized_input_window = train_dataset[:, input_window_begin:input_window_end] / stacked_seasonalities[:, input_window_begin:input_window_end]
+            #normalized_input_window = deseasonalized_input_window / stacked_levels[:, i].unsqueeze(1)
+            #categorized_input_window = torch.cat((normalized_input_window, input_categories), dim=1)
+            #input_windows.append(categorized_input_window)
+
+            #output_window_begin = i + 1
+            #output_window_end = output_window_begin + self.output_window_length
+            #if i < train_dataset.shape[1] - self.output_window_length:
+                #deseasonalized_output_window = train_dataset[:, output_window_begin:output_window_end] / stacked_seasonalities[:, output_window_begin:output_window_end]
+                #normalized_output_window = deseasonalized_output_window / stacked_levels[:, i].unsqueeze(1)
+                #output_windows.append(normalized_output_window)
                 
-        """""
+
 
         window_input = torch.cat([i.unsqueeze(0) for i in input_windows], dim=0)
         window_output = torch.cat([i.unsqueeze(0) for i in output_windows], dim=0)
@@ -262,6 +309,7 @@ class ESRNN(nn.Module):
         self.train()
 
         return prediction_values, actual_values, holdout_prediction, holdout_output, holdout_actual_values, holdout_actual_values_deseasonalized_normalized
+        """""
 
     def forward_rnn(self, dataset):
         dataset = self.residual_drnn(dataset)
@@ -270,23 +318,18 @@ class ESRNN(nn.Module):
         dataset = self.scoring(dataset)
         return dataset
 
-    def tranform_list(self, input):  # from 5x1 to 5
-        list_return = []
-        for i in range(len(input)):
-            list_return.append(torch.cat([j for j in input[i]]))
-        return torch.cat([i.unsqueeze(0) for i in list_return], dim=0)
-
 
 class ResidualDRNN(nn.Module):
     def __init__(self, ESRNN):
         super(ResidualDRNN, self).__init__()
         layers = []
-        dilations = ((1, 7), (14, 28))  # what is the len of this thing? maybe [1, 2, 2,6] or something TODO has been changed according to ESRNN daily config
+        dilations = ESRNN.params['dilations']  # TODO has been changed according to ESRNN daily config
 
         total_embedding_dimensions = embedding_vectors_preparation.get_total_dimensions(ESRNN.categories_unique_headers)
-        total_embedding_dimensions += ESRNN.input_window_length * embedding_vectors_preparation.get_total_dimensions(ESRNN.time_categories_unique_headers)
-        input_length = ESRNN.input_window_length + total_embedding_dimensions  # todo add time embedding dimesnions
-        #input_length = 1 + total_embedding_dimensions
+        #total_embedding_dimensions += ESRNN.input_window_length * embedding_vectors_preparation.get_total_dimensions(ESRNN.time_categories_unique_headers)
+        total_embedding_dimensions += embedding_vectors_preparation.get_total_dimensions(ESRNN.time_categories_unique_headers)
+        #input_length = ESRNN.input_window_length + total_embedding_dimensions  # todo add time embedding dimesnions
+        input_length = 1 + total_embedding_dimensions
 
         for i in range(len(dilations)):
             layer = DRNN(input_length, ESRNN.LSTM_size, len(dilations[i]), dilations[i], cell_type='LSTM')
