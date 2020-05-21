@@ -2,7 +2,6 @@ from trainer import Trainer
 import config
 from model import ESRNN
 from bayes_opt import BayesianOptimization
-import torch
 import torch.nn as nn
 
 

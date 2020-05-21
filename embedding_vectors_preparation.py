@@ -14,12 +14,15 @@ def get_embedding_vector_dimension(amount_of_unique_values):
 def create_category_unique_headers(whole_dataset_categories, j):
     whole_dataset_extracted_categories = extract_needed_category(whole_dataset_categories, j)
     #category_unique_values = []
-    category_unique_values = np.unique(whole_dataset_extracted_categories)
+    category_unique_values_numpy = np.unique(whole_dataset_extracted_categories)
     """"
     for i in range(len(whole_dataset_extracted_categories)):
         if category_not_added(whole_dataset_categories[i], category_unique_values):
             category_unique_values.append(whole_dataset_extracted_categories[i])
     """
+    category_unique_values = []
+    for i in range(len(category_unique_values_numpy)):
+        category_unique_values.append(category_unique_values_numpy[i])
     return category_unique_values  # we can return no numpy array if needed, I think, todo removed numpy from here
 
 
@@ -52,6 +55,13 @@ def get_total_dimensions(categories_unique_headers):
     sum_of_dimensions = 0
     for i in range(len(categories_unique_headers)):
         sum_of_dimensions += get_embedding_vector_dimension(len(categories_unique_headers[i]))
+    return sum_of_dimensions
+
+
+def get_total_dimensions_from_length(unique_labels_length):
+    sum_of_dimensions = 0
+    for i in range(len(unique_labels_length)):
+        sum_of_dimensions += get_embedding_vector_dimension(unique_labels_length[i])
     return sum_of_dimensions
 
 
