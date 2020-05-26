@@ -23,8 +23,8 @@ class ClassifierDataset(Dataset):
     def __init__(self, classification_dataset, device):
         self.series_index = [torch.tensor(classification_dataset[i, 0]) for i in range(len(classification_dataset[:, 0]))]
         self.day_index = [torch.tensor(classification_dataset[i, 1]) for i in range(len(classification_dataset[:, 1]))]
-        self.numerical_data = [torch.tensor(classification_dataset[i, 2:8], dtype=torch.float32) for i in range(len(classification_dataset[:, 2:8]))]
-        self.categorical_data = [torch.tensor(classification_dataset[i, 8:20], dtype=torch.int64) for i in range(len(classification_dataset[:, 8:20]))]
+        self.numerical_data = [torch.tensor(classification_dataset[i, 3:8], dtype=torch.float32) for i in range(len(classification_dataset[:, 2:8]))]
+        self.categorical_data = [torch.tensor(classification_dataset[i, 8:15], dtype=torch.int64) for i in range(len(classification_dataset[:, 8:20]))]
         self.target = [torch.tensor(classification_dataset[i, 20]) for i in range(len(classification_dataset[:, 20]))]
         self.device = device
 
@@ -44,8 +44,8 @@ class ClassifierValDatset(Dataset):
     def __init__(self, val_data, device):
         self.series_index = [torch.tensor(val_data[i, 0]) for i in range(len(val_data[:, 0]))]
         self.day_index = [torch.tensor(val_data[i, 1]) for i in range(len(val_data[:, 1]))]
-        self.numerical_data = [torch.tensor(val_data[i, 2:8], dtype=torch.float32) for i in range(len(val_data[:, 2:8]))]
-        self.categorical_data = [torch.tensor(val_data[i, 8:20], dtype=torch.int64) for i in range(len(val_data[:, 8:20]))]
+        self.numerical_data = [torch.tensor(val_data[i, 3:8], dtype=torch.float32) for i in range(len(val_data[:, 2:8]))]
+        self.categorical_data = [torch.tensor(val_data[i, 8:15], dtype=torch.int64) for i in range(len(val_data[:, 8:20]))]
         self.device = device
 
     def __len__(self):

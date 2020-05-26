@@ -11,8 +11,8 @@ class ZeroClassifier(nn.Module):
         unique_labels_length = []
         for j in range(len(preprocessed_time_categories[0])):
             unique_labels_length.append(len(embedding_vectors_preparation.create_category_unique_headers(preprocessed_time_categories, j)))
-        for j in range(len(encoded_categories[0])):
-            unique_labels_length.append(len(embedding_vectors_preparation.create_category_unique_headers(encoded_categories, j)))
+        #for j in range(len(encoded_categories[0])):
+            #unique_labels_length.append(len(embedding_vectors_preparation.create_category_unique_headers(encoded_categories, j)))
 
         embedding_vectors_dimensions = []
         for i in range(len(unique_labels_length)):
@@ -21,17 +21,19 @@ class ZeroClassifier(nn.Module):
         self.embeddings = nn.ModuleList([nn.Embedding(unique_labels_length[i], embedding_vectors_dimensions[i]) for i in range(len(unique_labels_length))])
         input_size = embedding_vectors_preparation.get_total_dimensions_from_length(unique_labels_length) + numerical_size
 
-        self.linear_1 = nn.Linear(input_size, 200)
+        self.linear_1 = nn.Linear(input_size, 64)
         self.batch_norm_1 = nn.BatchNorm1d(numerical_size)  # not an input size in the example
 
-        self.linear_2 = nn.Linear(200, 70)
-        self.batch_norm_2 = nn.BatchNorm1d(200)
+        self.linear_2 = nn.Linear(64, 16)
+        self.batch_norm_2 = nn.BatchNorm1d(64)
 
-        self.linear_3 = nn.Linear(70, 1)
-        self.batch_norm_3 = nn.BatchNorm1d(70)
+        self.linear_3 = nn.Linear(16, 1)
+        self.batch_norm_3 = nn.BatchNorm1d(16)
 
         self.embedding_dropout = nn.Dropout(0.6)
         self.dropouts = nn.Dropout(0.3)
+
+        self.sigmoid_activation = nn.Sigmoid()
 
     def forward(self, train_dataset_numerical, train_dataset_categorical):
         output = [embedding(train_dataset_categorical[:, i]) for i, embedding in enumerate(self.embeddings)]

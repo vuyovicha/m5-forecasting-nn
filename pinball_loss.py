@@ -44,3 +44,32 @@ class RMSELoss(torch.nn.Module):
                     loss += (predictions_reshape[i, j] - actuals_reshape[i, j]) ** 2.0
                     amount_of_values += 1
         return torch.sqrt(loss / amount_of_values)
+
+
+class RMSENormalizedLoss(torch.nn.Module):
+    def __init__(self, real_values_starting_indexes):
+        super(RMSENormalizedLoss, self).__init__()
+        self.real_values_starting_indexes = real_values_starting_indexes
+
+    def forward(self, predictions, actuals, indexes):
+        loss = 0
+        amount_of_values = 0
+        for i in range(len(predictions)):
+            for j in range(len(predictions[i])):
+                if j >= self.real_values_starting_indexes[indexes[i]]:
+                    loss += (predictions[i, j] - actuals[i, j]) ** 2.0
+                    amount_of_values += 1
+        return torch.sqrt(loss / amount_of_values)
+
+
+class ValidationRMSELoss(torch.nn.Module):
+    def __init__(self):
+        super(ValidationRMSELoss, self).__init__()
+
+    def forward(self, predictions, actuals):
+        criterion = nn.MSELoss()
+        loss = torch.sqrt(criterion(predictions, actuals))
+        return loss
+
+
+

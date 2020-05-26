@@ -17,7 +17,7 @@ params_init_val = {
             'output_window_length': int(28),
             'training_without_val_dataset': False,
             'starting_validation_day': int(1885),
-            'classification_batch_threshold': int(5)
+            'amount_of_values_per_series': int(1900)
 }
 
 bounds = {

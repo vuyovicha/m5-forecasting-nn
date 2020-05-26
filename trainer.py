@@ -4,7 +4,7 @@ import time
 from pinball_loss import PinballLoss
 import os
 import numpy as np
-from pinball_loss import RMSELoss
+from pinball_loss import RMSELoss, ValidationRMSELoss, RMSENormalizedLoss
 
 
 class Trainer(nn.Module):
@@ -31,6 +31,9 @@ class Trainer(nn.Module):
         self.params = params
         self.real_values_starting_indexes = real_values_starting_indexes
         self.measure_rmse = RMSELoss(self.real_values_starting_indexes)
+        self.val_rmse = ValidationRMSELoss()
+        real_values_starting_indexes_plus_one = [i + 1 for i in self.real_values_starting_indexes]
+        self.model_renormalized_rmse = RMSENormalizedLoss(real_values_starting_indexes_plus_one)
 
     def train_epochs(self):
         loss_max = 1e8
@@ -44,7 +47,8 @@ class Trainer(nn.Module):
                 loss_max = loss_epoch  # isn't it?
             print('Training_loss: %f' % loss_epoch)
             if not self.params['training_without_val_dataset']:
-                loss_validation = self.validation()
+                loss_validation, training_rmse_loss = self.validation()
+                print('Training_RMSE_loss: %f' % training_rmse_loss)
                 print('Validation_loss: %f' % loss_validation)
             else:
                 self.training_without_val_set()
@@ -68,9 +72,7 @@ class Trainer(nn.Module):
 
     def train_batch(self, train_dataset, val_dataset, indexes, categories):  # removed mean square log difference from the model output
         self.optimization.zero_grad()
-        prediction_values, actual_values = self.model(train_dataset, val_dataset, indexes, categories)  # , _, _, _, _
-        #prediction_values, actual_values, _, _, _, _ = self.model(train_dataset, val_dataset, indexes, categories, validation=True)  # todo
-        #loss_batch = self.measure_pinball_train(prediction_values, actual_values)
+        prediction_values, actual_values = self.model(train_dataset, val_dataset, indexes, categories)
         loss_batch = self.measure_rmse(prediction_values, actual_values, indexes)
         loss_batch.backward()
         nn.utils.clip_grad_value_(self.model.parameters(), self.clip_value)
@@ -89,19 +91,19 @@ class Trainer(nn.Module):
         with torch.no_grad():  # we will not use gradient here
             prediction_values = []
             loss_holdout = 0
+            training_rmse_loss = 0
             for batch, (train_dataset, val_dataset, indexes, categories) in enumerate(self.data_loader):
-                _, _, holdout_prediction, holdout_output_cat, holdout_actual_values, holdout_actual_values_deseasonalized_normalized = self.model(
+                _, _, holdout_prediction, holdout_actual_values, cat_real_output_values, cat_normalized_model_output_list = self.model(
                     train_dataset, val_dataset, indexes, categories, validation=True)
-                # TODO we should measure holdout_output last value with actual deseas and norm values
-                current_holdout_loss = self.measure_pinball_val(holdout_prediction.float(), holdout_actual_values.float())
-                #current_holdout_loss = self.measure_rmse(holdout_output_cat.float(), holdout_actual_values_deseasonalized_normalized.float())  # todo THIS
-                #current_holdout_loss = self.measure_pinball_val(holdout_output_cat.float(), holdout_actual_values_deseasonalized_normalized.float())
+                current_holdout_loss = self.val_rmse(holdout_prediction.float(), holdout_actual_values.float())
                 loss_holdout += current_holdout_loss
                 prediction_values.append(holdout_prediction)
+                training_rmse_loss += self.model_renormalized_rmse(cat_real_output_values, cat_normalized_model_output_list, indexes)
             predictions = torch.cat([i for i in prediction_values], dim=0)
             self.save_predictions(predictions)
             loss_holdout = loss_holdout / (batch + 1)
-        return float(loss_holdout.detach().cpu().item())
+            training_rmse_loss = training_rmse_loss / (batch + 1)
+        return float(loss_holdout.detach().cpu().item()), float(training_rmse_loss.detach().cpu().item())
 
     def training_without_val_set(self):
         self.model.eval()

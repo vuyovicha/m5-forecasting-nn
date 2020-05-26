@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 
 
 def find_index(given_week, weeks):
@@ -23,4 +24,21 @@ def create_prices_dataset(train_dataset_len, weeks, sell_prices_initial_data):
                 current_item += 1
         if current_item == train_dataset_len:  # todo remove this
             break
+    return prices_dataset
+
+
+def save_prices_dataset(prices_dataset):
+    file_name = "PRICES_DATASET.csv"
+    np.savetxt(file_name, prices_dataset.cpu(), delimiter=',', fmt="%s")
+
+
+def read_saved_prices_dataset(file_path):
+    with open(file_path, "r") as file:
+        data = file.read().split("\n")
+    prices_dataset_list = []
+    for i in range(0, len(data) - 1):
+        line = data[i].split(',')  # deleted replace(...)
+        current_prices_dataset_list = [torch.tensor(float(value)) for value in line]
+        prices_dataset_list.append(torch.stack(current_prices_dataset_list))
+    prices_dataset = torch.stack(prices_dataset_list)
     return prices_dataset
