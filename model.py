@@ -156,17 +156,19 @@ class ESRNN(nn.Module):
             current_non_zero_value_index = 0
             for j in range(train_dataset.shape[1]):
                 if train_dataset[i, j] == 0:
-                    current_input_values.append(torch.zeros(1 + self.total_embedding_dimensions))
+                    current_input_values.append(torch.zeros(1 + self.total_embedding_dimensions).to(self.params['device']))
                 else:
                     deseasonalized_input_value = train_dataset[i, j] / cat_series_seasonalities_list[i][current_non_zero_value_index]
                     normalized_input_value = deseasonalized_input_value / cat_series_levels_list[i][current_non_zero_value_index]
                     categorized_input_value = torch.cat((normalized_input_value.unsqueeze(0), input_categories_list[i]), dim=0)
                     input_time_category_index = self.used_days_dataset[indexes[i]][current_non_zero_value_index]
-                    if j != train_dataset.shape[1] - 1 and self.predictions_lengths[i] == 0:
+                    if j != train_dataset.shape[1] - 1:
                         time_categorized_input_value = torch.cat((categorized_input_value, input_time_categories[input_time_category_index + 1]), dim=0)
-                    else:
+                    elif self.predictions_lengths[indexes[i]] != 0:
                         first_validation_index = self.predictions_indexes[indexes[i]][0]
                         time_categorized_input_value = torch.cat((categorized_input_value, input_time_categories[first_validation_index]), dim=0)
+                    else:
+                        time_categorized_input_value = torch.cat((categorized_input_value, input_time_categories[0]), dim=0)  # inputing random category, not gonna use this value
                     current_input_values.append(time_categorized_input_value)
                     current_non_zero_value_index += 1
                 if j < train_dataset.shape[1] - 1:
@@ -213,20 +215,23 @@ class ESRNN(nn.Module):
             for i in range(len(all_holdout_outputs)):
                 holdout_outputs_list.append(torch.cat([j for j in all_holdout_outputs[i]]))
 
+            dtype = torch.cuda.FloatTensor if torch.cuda.is_available() else torch.FloatTensor
             renormalized_holdout_outputs_list = []
             for i in range(len(holdout_outputs_list)):
                 holdout_output_reseasonalized = holdout_outputs_list[i] * cat_series_seasonalities_list[i][-self.predictions_lengths[indexes[i]]:]
-                holdout_output_renormalized = holdout_output_reseasonalized * cat_series_levels_list[i][-1] # todo not correct level index here
+                holdout_output_renormalized = holdout_output_reseasonalized * cat_series_levels_list[i][-1]  # todo not correct level index here
                 holdout_output_zero_compared = holdout_output_renormalized * torch.gt(holdout_output_renormalized, 0).float()
-                renormalized_holdout_outputs_list.append(holdout_output_zero_compared)
+                holdout_output_insert_ones_list = [torch.ones(1).type(dtype)[0] if value < 1 else value for value in holdout_output_zero_compared]  # ADDED THIS BECAUSE THESE VALUES ARE NOT ZERO
+                holdout_output_insert_ones = torch.cat([j.unsqueeze(0) for j in holdout_output_insert_ones_list])
+                renormalized_holdout_outputs_list.append(holdout_output_insert_ones)
 
             holdout_outputs_zero_list = []
             for i in range(len(renormalized_holdout_outputs_list)):
                 current_holdout_outputs_zero_list = [0 for k in range(self.output_window_length)]
-                for j in range(len(self.zero_related_predictions_indexes)):
-                    current_holdout_outputs_zero_list[self.zero_related_predictions_indexes[indexes[i]][j]] = renormalized_holdout_outputs_list[i][j].numpy()
+                for j in range(len(self.zero_related_predictions_indexes[indexes[i]])):
+                    current_holdout_outputs_zero_list[self.zero_related_predictions_indexes[indexes[i]][j]] = renormalized_holdout_outputs_list[i][j].cpu().numpy()
                 current_holdout_outputs_zero_numpy_list = np.array(current_holdout_outputs_zero_list)
-                holdout_outputs_zero_list.append(torch.from_numpy(current_holdout_outputs_zero_numpy_list))
+                holdout_outputs_zero_list.append(torch.from_numpy(current_holdout_outputs_zero_numpy_list).type(dtype))
 
             holdout_prediction = torch.cat([i.unsqueeze(0) for i in holdout_outputs_zero_list], dim=0)
             holdout_actual_values = val_dataset
@@ -236,7 +241,7 @@ class ESRNN(nn.Module):
 
             real_output_values = []
             for i in range(len(train_dataset)):
-                real_output_values.append(torch.cat((torch.zeros(self.real_values_starting_indexes[indexes[i]]), train_dataset[i, self.real_values_starting_indexes[indexes[i]]:]), dim=0))
+                real_output_values.append(torch.cat((torch.zeros(self.real_values_starting_indexes[indexes[i]]).to(self.params['device']), train_dataset[i, self.real_values_starting_indexes[indexes[i]]:]), dim=0))
             cat_real_output_values = torch.cat([i.unsqueeze(0) for i in real_output_values], dim=0)
 
             normalized_model_output_list = []
@@ -247,7 +252,7 @@ class ESRNN(nn.Module):
                     renormalized_value = reseasonalized_value * cat_series_levels_list[series_index][value_index]  # maybe smth weird happens with indexes here
                     current_normalized_model_output_list.append(renormalized_value * torch.gt(renormalized_value, 0).float())
                 real_values = torch.cat([i for i in current_normalized_model_output_list])
-                zeros = torch.zeros(self.real_values_starting_indexes[indexes[series_index]] + 1)
+                zeros = torch.zeros(self.real_values_starting_indexes[indexes[series_index]] + 1).to(self.params['device'])
                 normalized_model_output_list.append(torch.cat((zeros, real_values), dim=0))
             cat_normalized_model_output_list = torch.cat([i.unsqueeze(0) for i in normalized_model_output_list])
 

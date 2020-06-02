@@ -5,14 +5,12 @@ import torch.nn.functional as F
 
 
 class ZeroClassifier(nn.Module):
-    def __init__(self, numerical_size, encoded_categories, preprocessed_time_categories):
+    def __init__(self, numerical_size, preprocessed_time_categories):
         super(ZeroClassifier, self).__init__()
 
         unique_labels_length = []
         for j in range(len(preprocessed_time_categories[0])):
             unique_labels_length.append(len(embedding_vectors_preparation.create_category_unique_headers(preprocessed_time_categories, j)))
-        #for j in range(len(encoded_categories[0])):
-            #unique_labels_length.append(len(embedding_vectors_preparation.create_category_unique_headers(encoded_categories, j)))
 
         embedding_vectors_dimensions = []
         for i in range(len(unique_labels_length)):
@@ -35,7 +33,11 @@ class ZeroClassifier(nn.Module):
 
         self.sigmoid_activation = nn.Sigmoid()
 
-    def forward(self, train_dataset_numerical, train_dataset_categorical):
+    def forward(self, train_dataset_numerical, train_dataset_categorical, validation=False):
+        if validation:
+            self.eval()
+        else:
+            self.train()
         output = [embedding(train_dataset_categorical[:, i]) for i, embedding in enumerate(self.embeddings)]
         output = torch.cat(output, dim=1)
         output = self.embedding_dropout(output)

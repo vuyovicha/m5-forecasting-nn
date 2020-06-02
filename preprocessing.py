@@ -8,7 +8,7 @@ def read_file_train(file_path):
         data = file.read().split("\n")
     series = []
     categories = []
-    for i in range(1, 2):
+    for i in range(1, 6):
     #for i in range (1, len(data) - 1):  # we exclude -1 because plain line is got when splitting by a \n
         line = data[i].split(',')  # deleted replace(...)
         categories.append([str(value) for value in line[1:6]])
